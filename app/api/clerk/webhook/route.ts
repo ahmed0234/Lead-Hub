@@ -27,13 +27,19 @@ function getPrimaryEmail(data: ClerkUserData): string {
   return emails[0].email_address; // Fallback to first email if primary ID doesn't match
 }
 
-function buildUserName(firstName: string | null, lastName: string | null): string | null {
+function buildUserName(
+  firstName: string | null,
+  lastName: string | null,
+): string | null {
   if (!firstName && !lastName) return null;
   return [firstName, lastName].filter(Boolean).join(" ");
 }
 
 function generateWorkspaceSlug(name: string): string {
-  const baseSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  const baseSlug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
   // Append random string to guarantee uniqueness
   return `${baseSlug || "workspace"}-${Math.random().toString(36).substring(2, 7)}`;
 }
@@ -70,7 +76,9 @@ export async function POST(req: NextRequest) {
         return new NextResponse("User already exists", { status: 200 });
       }
 
-      const workspaceName = name ? `${name}'s Workspace` : `${email}'s Workspace`;
+      const workspaceName = name
+        ? `${name}'s Workspace`
+        : `${email}'s Workspace`;
       const workspaceSlug = generateWorkspaceSlug(workspaceName);
 
       // Use a transaction to ensure User, Workspace, and WorkspaceMember are created atomically
@@ -99,7 +107,9 @@ export async function POST(req: NextRequest) {
         });
       });
 
-      return new NextResponse("User and personal workspace created", { status: 201 });
+      return new NextResponse("User and personal workspace created", {
+        status: 201,
+      });
     }
 
     // 2. Handle User Updated
@@ -118,7 +128,9 @@ export async function POST(req: NextRequest) {
 
       if (!existingUser) {
         // Return 200 so webhook isn't retried unnecessarily for an unknown user
-        console.warn(`User ${clerkId} not found for update. Gracefully skipping.`);
+        console.warn(
+          `User ${clerkId} not found for update. Gracefully skipping.`,
+        );
         return new NextResponse("User not found", { status: 200 });
       }
 
@@ -140,7 +152,9 @@ export async function POST(req: NextRequest) {
       });
 
       if (!existingUser) {
-        console.warn(`User ${clerkId} not found for deletion. Gracefully skipping.`);
+        console.warn(
+          `User ${clerkId} not found for deletion. Gracefully skipping.`,
+        );
         return new NextResponse("User already deleted", { status: 200 });
       }
 
