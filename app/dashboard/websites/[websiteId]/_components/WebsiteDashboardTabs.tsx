@@ -12,6 +12,7 @@ import StatusToggle from "./StatusToggle";
 import EditWebsiteDialog from "./EditWebsiteDialog";
 import DeleteWebsiteDialog from "./DeleteWebsiteDialog";
 import RegenerateKeyDialog from "./RegenerateKeyDialog";
+import LeadsCrmDashboard from "@/components/LeadsCrmDashboard";
 
 interface Lead {
   id: string;
@@ -133,77 +134,10 @@ export default function WebsiteDashboardTabs({
         {/* LEADS TAB */}
         {activeTab === "leads" && (
           <div className="flex flex-col gap-4">
-            <h2 className="text-base font-semibold">Submissions Log</h2>
-
-            {leads.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-16 text-center bg-card">
-                <Inbox size={36} className="text-muted-foreground mb-3" />
-                <p className="text-sm font-medium text-muted-foreground">
-                  No submissions yet
-                </p>
-                <p className="text-xs text-muted-foreground mt-1 max-w-[280px]">
-                  Submit form submissions with your API secret key to see them here.
-                </p>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {leads.map((lead) => (
-                  <Card key={lead.id} className="overflow-hidden shadow-sm">
-                    <CardContent className="flex flex-col md:flex-row md:items-start justify-between gap-4 py-4">
-                      <div className="flex-1 min-w-0 flex flex-col gap-2">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs border-b border-border pb-2">
-                          <div>
-                            <span className="font-semibold text-muted-foreground">Name:</span>{" "}
-                            <span className="text-foreground">{lead.name || "N/A"}</span>
-                          </div>
-                          <div>
-                            <span className="font-semibold text-muted-foreground">Email:</span>{" "}
-                            <span className="text-foreground">{lead.email || "N/A"}</span>
-                          </div>
-                          <div>
-                            <span className="font-semibold text-muted-foreground">Phone:</span>{" "}
-                            <span className="text-foreground">{lead.phone || "N/A"}</span>
-                          </div>
-                          <div>
-                            <span className="font-semibold text-muted-foreground">IP Address:</span>{" "}
-                            <span className="text-foreground font-mono">{lead.ip || "N/A"}</span>
-                          </div>
-                        </div>
-
-                        {lead.message && (
-                          <div className="text-sm text-foreground bg-muted/30 p-2.5 rounded border border-border/40">
-                            <span className="font-semibold text-xs text-muted-foreground block mb-1">Message:</span>
-                            {lead.message}
-                          </div>
-                        )}
-
-                        <div className="text-xs text-muted-foreground mt-1 flex flex-col gap-1 bg-muted/15 p-2 rounded">
-                          <span className="font-semibold text-foreground">Payload Data (JSON):</span>
-                          <pre className="font-mono text-[11px] whitespace-pre-wrap break-all mt-1">
-                            {JSON.stringify(lead.metadata, null, 2)}
-                          </pre>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col items-end gap-1.5 shrink-0 justify-between self-stretch">
-                        <span className="text-xs text-muted-foreground whitespace-nowrap bg-muted px-2 py-0.5 rounded font-medium">
-                          {new Date(lead.submittedAt).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                        
-                        <div className="text-[10px] text-muted-foreground max-w-[200px] text-right truncate italic">
-                          {lead.userAgent || "Unknown Browser"}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
+            <LeadsCrmDashboard
+              initialLeads={leads as any}
+              isWebsiteSpecific={true}
+            />
           </div>
         )}
 
