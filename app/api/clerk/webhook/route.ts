@@ -2,7 +2,7 @@ import { verifyWebhook } from "@clerk/nextjs/webhooks";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
-// ─── Interfaces ──────────────────────────────────────────────────────────────
+// -- Interfaces for type safety --
 
 interface ClerkEmailAddress {
   id: string;
@@ -17,7 +17,7 @@ interface ClerkUserData {
   primary_email_address_id: string | null;
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// -- Helper Functions --
 
 function getPrimaryEmail(data: ClerkUserData): string {
   const emails = data.email_addresses;
@@ -42,31 +42,19 @@ function generateWorkspaceSlug(name: string): string {
   return `${baseSlug || "workspace"}-${Math.random().toString(36).substring(2, 7)}`;
 }
 
-// ─── Route Handler ────────────────────────────────────────────────────────────
+// -- Route Handler --
 
 export async function POST(req: NextRequest) {
-  // BUG FIX #1: verifyWebhook() from @clerk/nextjs/webhooks auto-reads
-  // CLERK_WEBHOOK_SIGNING_SECRET from env — NOT CLERK_WEBHOOK_SECRET.
-  // Your .env already has the correct key name so this will work.
-  // However if verification silently fails, it throws, which is caught below.
   let evt: Awaited<ReturnType<typeof verifyWebhook>>;
 
   try {
     evt = await verifyWebhook(req);
   } catch (err) {
-    // This is the most common failure point — log the full error so you can
-    // distinguish a bad signature from a missing env var.
     console.error("[clerk-webhook] Signature verification FAILED:", err);
     return new NextResponse("Webhook verification failed", { status: 400 });
   }
 
-  // ── Extract top-level fields ──────────────────────────────────────────────
   const eventType = evt.type;
-
-  // BUG FIX #2: For user.deleted, Clerk sends a *partial* payload where
-  // email_addresses and other fields may be absent. Casting the whole payload
-  // as ClerkUserData and then reading email_addresses crashes the handler for
-  // deletions. We keep ClerkUserData only for user.created / user.updated.
   const rawData = evt.data as Record<string, unknown>;
   const clerkId = rawData.id as string | undefined;
 
@@ -78,7 +66,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // ── user.created ────────────────────────────────────────────────────────
+    // 1. Handle User Created
     if (eventType === "user.created") {
       const data = rawData as unknown as ClerkUserData;
       console.log("[clerk-webhook] user.created raw data:", JSON.stringify(data, null, 2));
@@ -93,59 +81,55 @@ export async function POST(req: NextRequest) {
         return new NextResponse("User has no email", { status: 400 });
       }
 
-      // Idempotency: skip if already exists (handles webhook retries)
-      const existingUser = await prisma.user.findUnique({ where: { clerkId } });
+      // Idempotency: using findFirst is safer in case unique metadata mapping is out of sync
+      const existingUser = await prisma.user.findFirst({
+        where: { clerkId },
+      });
+
       if (existingUser) {
-        console.log(`[clerk-webhook] user.created: User ${clerkId} already exists — skipping`);
+        console.log(`[clerk-webhook] user.created: User ${clerkId} already exists in DB with id ${existingUser.id} — skipping creation`);
         return new NextResponse("User already exists", { status: 200 });
       }
 
-      const workspaceName = name
-        ? `${name}'s Workspace`
-        : `${email}'s Workspace`;
+      const workspaceName = name ? `${name}'s Workspace` : `${email}'s Workspace`;
       const workspaceSlug = generateWorkspaceSlug(workspaceName);
 
-      console.log(`[clerk-webhook] Creating user + workspace "${workspaceName}" (slug: ${workspaceSlug})`);
+      console.log(`[clerk-webhook] Creating user and workspace: "${workspaceName}"`);
 
-      // BUG FIX #3: WorkspaceMember.updatedAt has @updatedAt but NO @default().
-      // When Prisma creates a WorkspaceMember row it needs an initial value for
-      // updatedAt. In older Prisma versions this was implicit; in Prisma 6+ with
-      // the pg adapter it throws "null value in column violates not-null" inside
-      // the transaction, which rolls everything back silently.
-      // Fix: add @default(now()) to WorkspaceMember.updatedAt in schema (done
-      // below as a schema patch note) AND pass an explicit value here as a
-      // belt-and-suspenders guard until the next migration runs.
       await prisma.$transaction(async (tx) => {
-        console.log("[clerk-webhook] TX: creating User row...");
         const user = await tx.user.create({
-          data: { clerkId, email, name },
+          data: {
+            clerkId,
+            email,
+            name,
+          },
         });
-        console.log(`[clerk-webhook] TX: User created — id: ${user.id}`);
+        console.log(`[clerk-webhook] User record created: id ${user.id}`);
 
-        console.log("[clerk-webhook] TX: creating Workspace row...");
         const workspace = await tx.workspace.create({
-          data: { name: workspaceName, slug: workspaceSlug },
+          data: {
+            name: workspaceName,
+            slug: workspaceSlug,
+          },
         });
-        console.log(`[clerk-webhook] TX: Workspace created — id: ${workspace.id}`);
+        console.log(`[clerk-webhook] Workspace record created: id ${workspace.id}`);
 
-        console.log("[clerk-webhook] TX: creating WorkspaceMember row...");
         const member = await tx.workspaceMember.create({
           data: {
             workspaceId: workspace.id,
             userId: user.id,
             role: "OWNER",
-            // Explicit updatedAt guards against Prisma adapter not auto-filling it
             updatedAt: new Date(),
           },
         });
-        console.log(`[clerk-webhook] TX: WorkspaceMember created — id: ${member.id}`);
+        console.log(`[clerk-webhook] WorkspaceMember record created: id ${member.id}`);
       });
 
       console.log(`[clerk-webhook] user.created: SUCCESS for clerkId ${clerkId}`);
       return new NextResponse("User and personal workspace created", { status: 201 });
     }
 
-    // ── user.updated ────────────────────────────────────────────────────────
+    // 2. Handle User Updated
     if (eventType === "user.updated") {
       const data = rawData as unknown as ClerkUserData;
       console.log("[clerk-webhook] user.updated raw data:", JSON.stringify(data, null, 2));
@@ -160,55 +144,58 @@ export async function POST(req: NextRequest) {
         return new NextResponse("User has no email", { status: 400 });
       }
 
-      const existingUser = await prisma.user.findUnique({ where: { clerkId } });
+      console.log(`[clerk-webhook] Searching for user with clerkId: ${clerkId}`);
+      const existingUser = await prisma.user.findFirst({
+        where: { clerkId },
+      });
+
       if (!existingUser) {
-        console.warn(`[clerk-webhook] user.updated: clerkId ${clerkId} not found — skipping`);
+        console.warn(`[clerk-webhook] user.updated: clerkId ${clerkId} not found in DB — skipping update`);
         return new NextResponse("User not found", { status: 200 });
       }
 
-      console.log(`[clerk-webhook] Updating user ${clerkId}...`);
-      await prisma.user.update({
-        where: { clerkId },
-        data: { email, name },
+      console.log(`[clerk-webhook] Updating user ${existingUser.id} with new data...`);
+      const updatedUser = await prisma.user.update({
+        where: { id: existingUser.id },
+        data: {
+          email,
+          name,
+        },
       });
+      console.log(`[clerk-webhook] User updated successfully:`, JSON.stringify(updatedUser, null, 2));
 
       console.log(`[clerk-webhook] user.updated: SUCCESS for clerkId ${clerkId}`);
       return new NextResponse("User updated", { status: 200 });
     }
 
-    // ── user.deleted ────────────────────────────────────────────────────────
+    // 3. Handle User Deleted
     if (eventType === "user.deleted") {
-      // BUG FIX #4: Clerk sends user.deleted with a *partial* payload.
-      // The id field is present but email_addresses is NOT. Any code that
-      // tries to read data.email_addresses here will throw TypeError and the
-      // catch block returns 400, making Clerk retry forever.
-      // We only need clerkId here — already extracted above.
-
       console.log(`[clerk-webhook] user.deleted: looking up clerkId ${clerkId}`);
+      const existingUser = await prisma.user.findFirst({
+        where: { clerkId },
+      });
 
-      const existingUser = await prisma.user.findUnique({ where: { clerkId } });
       if (!existingUser) {
-        console.warn(`[clerk-webhook] user.deleted: clerkId ${clerkId} not found — already deleted`);
+        console.warn(`[clerk-webhook] user.deleted: clerkId ${clerkId} not found in DB — already deleted`);
         return new NextResponse("User already deleted", { status: 200 });
       }
 
-      console.log(`[clerk-webhook] Deleting user ${clerkId}...`);
-      // onDelete: Cascade on WorkspaceMember + LeadNote handles child rows
-      await prisma.user.delete({ where: { clerkId } });
+      console.log(`[clerk-webhook] Deleting user ${existingUser.id}...`);
+      const deletedUser = await prisma.user.delete({
+        where: { id: existingUser.id },
+      });
+      console.log(`[clerk-webhook] User deleted successfully:`, JSON.stringify(deletedUser, null, 2));
 
       console.log(`[clerk-webhook] user.deleted: SUCCESS for clerkId ${clerkId}`);
       return new NextResponse("User deleted", { status: 200 });
     }
 
-    // Unhandled event — return 200 so Clerk does not retry
-    console.log(`[clerk-webhook] Unhandled event type: ${eventType} — ignoring`);
+    console.log(`[clerk-webhook] Unhandled event type: ${eventType}`);
     return new NextResponse("Webhook event ignored", { status: 200 });
-
   } catch (err) {
-    // Log the full error object and stack so you can pinpoint the exact line
-    console.error("[clerk-webhook] DB/logic error:", err);
+    console.error("[clerk-webhook] DB/logic error processing webhook:", err);
     if (err instanceof Error) {
-      console.error("[clerk-webhook] Stack:", err.stack);
+      console.error("[clerk-webhook] Error stack trace:", err.stack);
     }
     return new NextResponse("Internal server error", { status: 500 });
   }
