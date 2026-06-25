@@ -42,8 +42,8 @@ export default function RegenerateKeyDialog({
         return;
       }
 
-      setNewSecret(json.secret);
-      toast.success("API secret regenerated successfully");
+      setNewSecret(json.apiSecret);
+      toast.success("API secret key regenerated successfully");
     } catch {
       toast.error("Network error. Please try again.");
     } finally {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { checkWebsitePermission } from "@/lib/permissions";
+import { checkWebsiteOwnership } from "@/lib/permissions";
 
 interface Params {
   params: Promise<{ websiteId: string }>;
@@ -9,31 +9,27 @@ interface Params {
 export async function PATCH(req: NextRequest, { params }: Params) {
   const { websiteId } = await params;
 
-  // Require OWNER or ADMIN role
-  const { authorized, website } = await checkWebsitePermission(
-    websiteId,
-    ["OWNER", "ADMIN"]
-  );
+  const { authorized, website } = await checkWebsiteOwnership(websiteId);
 
   if (!authorized || !website) {
     return NextResponse.json(
-      { error: "Unauthorized. Only workspace owners and admins can toggle website status." },
+      { error: "Unauthorized. You do not own this website." },
       { status: 403 }
     );
   }
 
-  let body: { isActive?: boolean };
+  let body: { status?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { isActive } = body;
+  const { status } = body;
 
-  if (typeof isActive !== "boolean") {
+  if (status !== "ACTIVE" && status !== "INACTIVE") {
     return NextResponse.json(
-      { error: "isActive must be a boolean" },
+      { error: "Status must be ACTIVE or INACTIVE" },
       { status: 400 }
     );
   }
@@ -41,7 +37,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const updatedWebsite = await prisma.website.update({
     where: { id: websiteId },
     data: {
-      isActive,
+      status,
     },
   });
 

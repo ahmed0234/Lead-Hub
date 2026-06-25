@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { Check, Copy } from "lucide-react";
 
 interface Props {
   open: boolean;
@@ -24,9 +25,9 @@ export default function CreateWebsiteDialog({ open, onOpenChange }: Props) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [domain, setDomain] = useState("");
-  const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -36,7 +37,7 @@ export default function CreateWebsiteDialog({ open, onOpenChange }: Props) {
       const res = await fetch("/api/websites", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, domain, description }),
+        body: JSON.stringify({ name, domain }),
       });
 
       const json = await res.json();
@@ -46,7 +47,8 @@ export default function CreateWebsiteDialog({ open, onOpenChange }: Props) {
         return;
       }
 
-      setCreatedSecret(json.secret as string);
+      setCreatedSecret(json.apiSecret as string);
+      toast.success("Website created successfully!");
       router.refresh();
     } catch {
       toast.error("Network error. Please try again.");
@@ -58,9 +60,17 @@ export default function CreateWebsiteDialog({ open, onOpenChange }: Props) {
   function handleClose() {
     setName("");
     setDomain("");
-    setDescription("");
     setCreatedSecret(null);
+    setCopied(false);
     onOpenChange(false);
+  }
+
+  function handleCopy() {
+    if (!createdSecret) return;
+    navigator.clipboard.writeText(createdSecret);
+    setCopied(true);
+    toast.success("API secret key copied");
+    setTimeout(() => setCopied(false), 2000);
   }
 
   return (
@@ -69,9 +79,9 @@ export default function CreateWebsiteDialog({ open, onOpenChange }: Props) {
         {!createdSecret ? (
           <>
             <DialogHeader>
-              <DialogTitle>Add Website</DialogTitle>
+              <DialogTitle>Register Website</DialogTitle>
               <DialogDescription>
-                Create a new website to start collecting leads.
+                Add a new website to start capturing lead submissions.
               </DialogDescription>
             </DialogHeader>
 
@@ -80,7 +90,7 @@ export default function CreateWebsiteDialog({ open, onOpenChange }: Props) {
                 <Label htmlFor="website-name">Website Name</Label>
                 <Input
                   id="website-name"
-                  placeholder="CineHive"
+                  placeholder="My Portfolio"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
@@ -88,25 +98,13 @@ export default function CreateWebsiteDialog({ open, onOpenChange }: Props) {
               </div>
 
               <div className="flex flex-col gap-2">
-                <Label htmlFor="website-domain">Domain</Label>
+                <Label htmlFor="website-domain">Domain Name</Label>
                 <Input
                   id="website-domain"
-                  placeholder="cinehive.com"
+                  placeholder="myportfolio.com"
                   value={domain}
                   onChange={(e) => setDomain(e.target.value)}
                   required
-                />
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="website-desc">Description (Optional)</Label>
-                <textarea
-                  id="website-desc"
-                  placeholder="e.g. Main corporate website for lead capturing"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={2}
-                  className="flex w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none"
                 />
               </div>
 
@@ -120,7 +118,7 @@ export default function CreateWebsiteDialog({ open, onOpenChange }: Props) {
                   Cancel
                 </Button>
                 <Button type="submit" disabled={loading}>
-                  {loading ? "Creating..." : "Create Website"}
+                  {loading ? "Registering..." : "Register Website"}
                 </Button>
               </DialogFooter>
             </form>
@@ -128,21 +126,31 @@ export default function CreateWebsiteDialog({ open, onOpenChange }: Props) {
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>Website Created!</DialogTitle>
+              <DialogTitle>Website Registered!</DialogTitle>
               <DialogDescription>
-                Save your API key now — it will only be shown once.
+                Copy your unique API secret key. It will only be shown once.
               </DialogDescription>
             </DialogHeader>
 
             <div className="flex flex-col gap-3 py-2">
-              <p className="text-sm text-muted-foreground">
-                Use this secret in your contact form to submit leads:
+              <p className="text-sm text-muted-foreground font-medium">
+                Include this secret key in your submissions payload:
               </p>
-              <div className="rounded-md bg-muted px-4 py-3 font-mono text-sm select-all break-all">
-                {createdSecret}
+              
+              <div className="flex items-center gap-2 rounded-md bg-muted px-4 py-3 font-mono text-sm break-all relative group select-all">
+                <span className="flex-1 pr-8">{createdSecret}</span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={handleCopy}
+                  className="h-8 w-8 absolute right-2 top-1/2 -translate-y-1/2"
+                >
+                  {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+                </Button>
               </div>
+
               <p className="text-xs text-muted-foreground">
-                Keep this secret private. You cannot retrieve it again.
+                Keep this key confidential. You can regenerate it if it gets compromised.
               </p>
             </div>
 

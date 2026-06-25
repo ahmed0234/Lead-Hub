@@ -2,16 +2,33 @@ import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { generateWebsiteSecret } from "@/lib/generateSecret";
-import { getWorkspaceByClerkOrg } from "@/lib/workspace";
+import { getCurrentUser } from "@/lib/permissions";
 
+// GET - Retrieve all websites belonging directly to the authenticated user
+export async function GET() {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const websites = await prisma.website.findMany({
+    where: { userId: user.id },
+    include: {
+      _count: { select: { leads: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return NextResponse.json(websites, { status: 200 });
+}
+
+// POST - Create a website directly under the authenticated user
 export async function POST(req: NextRequest) {
-  const { orgId } = await auth();
+  const user = await getCurrentUser();
 
-  if (!orgId) {
-    return NextResponse.json(
-      { error: "No active organization. Please select an organization." },
-      { status: 403 },
-    );
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   let body: { name?: string; domain?: string; description?: string };
@@ -21,7 +38,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { name, domain, description } = body;
+  const { name, domain } = body;
 
   if (!name || typeof name !== "string" || name.trim().length === 0) {
     return NextResponse.json(
@@ -32,34 +49,6 @@ export async function POST(req: NextRequest) {
 
   if (!domain || typeof domain !== "string" || domain.trim().length === 0) {
     return NextResponse.json({ error: "Domain is required" }, { status: 400 });
-  }
-
-  // Resolve the DB workspace for this Clerk org
-  const workspace = await getWorkspaceByClerkOrg(orgId);
-
-  if (!workspace) {
-    // Auto-create the workspace linked to this Clerk org if it doesn't exist yet
-    const newWorkspace = await prisma.workspace.create({
-      data: {
-        name: `Org Workspace`,
-        slug: `org-${orgId.slice(-8)}`,
-        clerkOrgId: orgId,
-      },
-    });
-
-    const secret = generateWebsiteSecret();
-
-    const website = await prisma.website.create({
-      data: {
-        workspaceId: newWorkspace.id,
-        name: name.trim(),
-        domain: domain.trim().toLowerCase(),
-        description: description?.trim() || null,
-        secret,
-      },
-    });
-
-    return NextResponse.json(website, { status: 201 });
   }
 
   // Check for domain conflict
@@ -74,41 +63,17 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const secret = generateWebsiteSecret();
+  const apiSecret = generateWebsiteSecret();
 
   const website = await prisma.website.create({
     data: {
-      workspaceId: workspace.id,
+      userId: user.id,
       name: name.trim(),
       domain: domain.trim().toLowerCase(),
-      description: description?.trim() || null,
-      secret,
+      apiSecret,
+      status: "ACTIVE",
     },
   });
 
   return NextResponse.json(website, { status: 201 });
-}
-
-export async function GET() {
-  const { orgId } = await auth();
-
-  if (!orgId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-  }
-
-  const workspace = await getWorkspaceByClerkOrg(orgId);
-
-  if (!workspace) {
-    return NextResponse.json([], { status: 200 });
-  }
-
-  const websites = await prisma.website.findMany({
-    where: { workspaceId: workspace.id },
-    include: {
-      _count: { select: { leads: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  return NextResponse.json(websites, { status: 200 });
 }

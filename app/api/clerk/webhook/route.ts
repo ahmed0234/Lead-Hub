@@ -15,6 +15,8 @@ interface ClerkUserData {
   last_name: string | null;
   email_addresses: ClerkEmailAddress[];
   primary_email_address_id: string | null;
+  image_url?: string | null;
+  profile_image_url?: string | null;
 }
 
 // -- Helper Functions --
@@ -34,14 +36,6 @@ function buildUserName(
   return [firstName, lastName].filter(Boolean).join(" ");
 }
 
-function generateWorkspaceSlug(name: string): string {
-  const baseSlug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-  return `${baseSlug || "workspace"}-${Math.random().toString(36).substring(2, 7)}`;
-}
-
 // -- Route Handler --
 
 export async function POST(req: NextRequest) {
@@ -56,11 +50,11 @@ export async function POST(req: NextRequest) {
 
   const eventType = evt.type;
   const rawData = evt.data as Record<string, unknown>;
-  const clerkId = rawData.id as string | undefined;
+  const clerkUserId = rawData.id as string | undefined;
 
-  console.log(`[clerk-webhook] Received event: ${eventType} | clerkId: ${clerkId}`);
+  console.log(`[clerk-webhook] Received event: ${eventType} | clerkUserId: ${clerkUserId}`);
 
-  if (!clerkId) {
+  if (!clerkUserId) {
     console.error("[clerk-webhook] Payload missing id field:", rawData);
     return new NextResponse("Webhook payload missing id", { status: 400 });
   }
@@ -73,6 +67,7 @@ export async function POST(req: NextRequest) {
 
       const email = getPrimaryEmail(data);
       const name = buildUserName(data.first_name, data.last_name);
+      const image = data.image_url || data.profile_image_url || null;
 
       console.log(`[clerk-webhook] Parsed — email: ${email} | name: ${name}`);
 
@@ -81,52 +76,29 @@ export async function POST(req: NextRequest) {
         return new NextResponse("User has no email", { status: 400 });
       }
 
-      // Idempotency: using findFirst is safer in case unique metadata mapping is out of sync
-      const existingUser = await prisma.user.findFirst({
-        where: { clerkId },
+      // Idempotency check
+      const existingUser = await prisma.user.findUnique({
+        where: { clerkUserId },
       });
 
       if (existingUser) {
-        console.log(`[clerk-webhook] user.created: User ${clerkId} already exists in DB with id ${existingUser.id} — skipping creation`);
+        console.log(`[clerk-webhook] user.created: User ${clerkUserId} already exists in DB — skipping creation`);
         return new NextResponse("User already exists", { status: 200 });
       }
 
-      const workspaceName = name ? `${name}'s Workspace` : `${email}'s Workspace`;
-      const workspaceSlug = generateWorkspaceSlug(workspaceName);
+      console.log(`[clerk-webhook] Creating user: clerkUserId: ${clerkUserId}, email: ${email}`);
 
-      console.log(`[clerk-webhook] Creating user and workspace: "${workspaceName}"`);
-
-      await prisma.$transaction(async (tx) => {
-        const user = await tx.user.create({
-          data: {
-            clerkId,
-            email,
-            name,
-          },
-        });
-        console.log(`[clerk-webhook] User record created: id ${user.id}`);
-
-        const workspace = await tx.workspace.create({
-          data: {
-            name: workspaceName,
-            slug: workspaceSlug,
-          },
-        });
-        console.log(`[clerk-webhook] Workspace record created: id ${workspace.id}`);
-
-        const member = await tx.workspaceMember.create({
-          data: {
-            workspaceId: workspace.id,
-            userId: user.id,
-            role: "OWNER",
-            updatedAt: new Date(),
-          },
-        });
-        console.log(`[clerk-webhook] WorkspaceMember record created: id ${member.id}`);
+      const user = await prisma.user.create({
+        data: {
+          clerkUserId,
+          email,
+          name,
+          image,
+        },
       });
 
-      console.log(`[clerk-webhook] user.created: SUCCESS for clerkId ${clerkId}`);
-      return new NextResponse("User and personal workspace created", { status: 201 });
+      console.log(`[clerk-webhook] User record created: id ${user.id}`);
+      return new NextResponse("User record created", { status: 201 });
     }
 
     // 2. Handle User Updated
@@ -136,6 +108,7 @@ export async function POST(req: NextRequest) {
 
       const email = getPrimaryEmail(data);
       const name = buildUserName(data.first_name, data.last_name);
+      const image = data.image_url || data.profile_image_url || null;
 
       console.log(`[clerk-webhook] Parsed — email: ${email} | name: ${name}`);
 
@@ -144,39 +117,37 @@ export async function POST(req: NextRequest) {
         return new NextResponse("User has no email", { status: 400 });
       }
 
-      console.log(`[clerk-webhook] Searching for user with clerkId: ${clerkId}`);
-      const existingUser = await prisma.user.findFirst({
-        where: { clerkId },
+      const existingUser = await prisma.user.findUnique({
+        where: { clerkUserId },
       });
 
       if (!existingUser) {
-        console.warn(`[clerk-webhook] user.updated: clerkId ${clerkId} not found in DB — skipping update`);
+        console.warn(`[clerk-webhook] user.updated: clerkUserId ${clerkUserId} not found in DB — skipping update`);
         return new NextResponse("User not found", { status: 200 });
       }
 
-      console.log(`[clerk-webhook] Updating user ${existingUser.id} with new data...`);
+      console.log(`[clerk-webhook] Updating user ${existingUser.id}...`);
       const updatedUser = await prisma.user.update({
         where: { id: existingUser.id },
         data: {
           email,
           name,
+          image,
         },
       });
       console.log(`[clerk-webhook] User updated successfully:`, JSON.stringify(updatedUser, null, 2));
-
-      console.log(`[clerk-webhook] user.updated: SUCCESS for clerkId ${clerkId}`);
       return new NextResponse("User updated", { status: 200 });
     }
 
     // 3. Handle User Deleted
     if (eventType === "user.deleted") {
-      console.log(`[clerk-webhook] user.deleted: looking up clerkId ${clerkId}`);
-      const existingUser = await prisma.user.findFirst({
-        where: { clerkId },
+      console.log(`[clerk-webhook] user.deleted: looking up clerkUserId ${clerkUserId}`);
+      const existingUser = await prisma.user.findUnique({
+        where: { clerkUserId },
       });
 
       if (!existingUser) {
-        console.warn(`[clerk-webhook] user.deleted: clerkId ${clerkId} not found in DB — already deleted`);
+        console.warn(`[clerk-webhook] user.deleted: clerkUserId ${clerkUserId} not found in DB — already deleted`);
         return new NextResponse("User already deleted", { status: 200 });
       }
 
@@ -185,18 +156,13 @@ export async function POST(req: NextRequest) {
         where: { id: existingUser.id },
       });
       console.log(`[clerk-webhook] User deleted successfully:`, JSON.stringify(deletedUser, null, 2));
-
-      console.log(`[clerk-webhook] user.deleted: SUCCESS for clerkId ${clerkId}`);
       return new NextResponse("User deleted", { status: 200 });
     }
 
     console.log(`[clerk-webhook] Unhandled event type: ${eventType}`);
     return new NextResponse("Webhook event ignored", { status: 200 });
   } catch (err) {
-    console.error("[clerk-webhook] DB/logic error processing webhook:", err);
-    if (err instanceof Error) {
-      console.error("[clerk-webhook] Error stack trace:", err.stack);
-    }
+    console.error("[clerk-webhook] Error processing Clerk webhook:", err);
     return new NextResponse("Internal server error", { status: 500 });
   }
 }

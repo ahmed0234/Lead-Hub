@@ -6,26 +6,28 @@ import { toast } from "sonner";
 
 interface Props {
   websiteId: string;
-  initialActive: boolean;
+  initialStatus: string; // "ACTIVE" or "INACTIVE"
   disabled?: boolean;
 }
 
-export default function StatusToggle({ websiteId, initialActive, disabled }: Props) {
+export default function StatusToggle({ websiteId, initialStatus, disabled }: Props) {
   const router = useRouter();
-  const [isActive, setIsActive] = useState(initialActive);
+  const [status, setStatus] = useState(initialStatus);
   const [loading, setLoading] = useState(false);
+
+  const isActive = status === "ACTIVE";
 
   async function handleToggle() {
     if (disabled || loading) return;
     
     setLoading(true);
-    const nextState = !isActive;
+    const nextStatus = isActive ? "INACTIVE" : "ACTIVE";
     
     try {
       const res = await fetch(`/api/websites/${websiteId}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: nextState }),
+        body: JSON.stringify({ status: nextStatus }),
       });
 
       if (!res.ok) {
@@ -34,8 +36,8 @@ export default function StatusToggle({ websiteId, initialActive, disabled }: Pro
         return;
       }
 
-      setIsActive(nextState);
-      toast.success(nextState ? "Website activated" : "Website deactivated");
+      setStatus(nextStatus);
+      toast.success(nextStatus === "ACTIVE" ? "Website activated" : "Website deactivated");
       router.refresh();
     } catch {
       toast.error("Network error. Please try again.");

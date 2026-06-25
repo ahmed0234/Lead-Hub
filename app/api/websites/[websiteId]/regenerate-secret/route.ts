@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { checkWebsitePermission } from "@/lib/permissions";
+import { checkWebsiteOwnership } from "@/lib/permissions";
 import { generateWebsiteSecret } from "@/lib/generateSecret";
 
 interface Params {
@@ -10,27 +10,23 @@ interface Params {
 export async function POST(req: NextRequest, { params }: Params) {
   const { websiteId } = await params;
 
-  // Require OWNER or ADMIN role
-  const { authorized, website } = await checkWebsitePermission(
-    websiteId,
-    ["OWNER", "ADMIN"]
-  );
+  const { authorized, website } = await checkWebsiteOwnership(websiteId);
 
   if (!authorized || !website) {
     return NextResponse.json(
-      { error: "Unauthorized. Only workspace owners and admins can regenerate secrets." },
+      { error: "Unauthorized. You do not own this website." },
       { status: 403 }
     );
   }
 
-  const newSecret = generateWebsiteSecret();
+  const apiSecret = generateWebsiteSecret();
 
   await prisma.website.update({
     where: { id: websiteId },
     data: {
-      secret: newSecret,
+      apiSecret,
     },
   });
 
-  return NextResponse.json({ secret: newSecret });
+  return NextResponse.json({ apiSecret });
 }

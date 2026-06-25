@@ -7,202 +7,66 @@ generator client {
   output   = "../app/generated/prisma"
 }
 
-/// --- ENUMS ---
-
-enum WorkspaceRole {
-  OWNER
-  ADMIN
-  MEMBER
-}
-
-enum LeadStatus {
-  NEW
-  CONTACTED
-  QUALIFIED
-  WON
-  LOST
-}
-
-enum EmailStatus {
-  SENT
-  DELIVERED
-  OPENED
-  CLICKED
-  BOUNCED
-  FAILED
-}
-
-/// --- MODELS ---
-
 model User {
-  id        String   @id @default(cuid())
-  clerkId   String?  @unique // Auth mapped Clerk User ID (nullable to allow migrations with existing rows)
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
-
-  // Relationships
-  workspaceMembers WorkspaceMember[]
-  leadsAssigned    Lead[]            @relation("LeadAssignment")
-  leadNotes        LeadNote[]
-
-  @@index([clerkId])
-}
-
-model Workspace {
-  id         String   @id @default(cuid())
-  name       String
-  slug       String   @unique // Unique identifier for routing (e.g., dashboard/workspace-slug)
-  clerkOrgId String?  @unique // Optional mapping to Clerk Organization for enterprise authentication
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  // Relationships
-  members  WorkspaceMember[]
-  websites Website[]
-}
-
-model WorkspaceMember {
-  id          String        @id @default(cuid())
-  workspaceId String
-  userId      String
-  role        WorkspaceRole @default(MEMBER)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-
-  // Relationships
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([workspaceId, userId]) // User can only join a workspace once
-  @@index([userId])
-  @@index([workspaceId])
-}
-
-model Website {
   id          String   @id @default(cuid())
-  workspaceId String
-  name        String
-  domain      String   @unique // Required domain for the client site
-  description String?  // Optional description of the website
-  secret      String   @unique // Auto-generated API key (e.g. lh_x8f3k29s7d91ab)
-  isActive    Boolean  @default(true)
+  clerkUserId String   @unique
+  email       String   @unique
+  name        String?
+  image       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   // Relationships
-  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  leads       Lead[]
-  formSchemas FormSchema[]
-  webhooks    Webhook[]
-
-  @@index([workspaceId])
+  websites    Website[]
 }
 
-model FormSchema {
-  id        String   @id @default(cuid())
-  websiteId String
-  name      String // Name of the form (e.g. "Contact Form", "Newsletter")
-  fields    Json // Array of validation field properties (name, type, required, etc.)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model Website {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  domain      String   @unique
+  apiSecret   String   @unique
+  status      String   @default("ACTIVE") // "ACTIVE" or "INACTIVE"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   // Relationships
-  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leads       Lead[]
 
-  @@index([websiteId])
+  @@index([userId])
 }
 
 model Lead {
-  id          String     @id @default(cuid())
+  id          String   @id @default(cuid())
   websiteId   String
-  data        Json // Stores dynamic fields (e.g. { name: "Ahmed", comment: "..." })
-  status      LeadStatus @default(NEW)
-  source      String? // Form name or submission channel (e.g., "footer-form")
-  submittedAt DateTime   @default(now())
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+
+  // ── Common typed fields (present on most forms) ──────────────────────────
+  // These are indexed/queryable columns. Map inbound JSON keys to these where possible.
+  name        String?
+  email       String?
+  phone       String?
+  company     String?
+  message     String?
+  source      String?  // e.g. "contact-form", "newsletter", "demo-request"
+
+  // ── Flexible catch-all for website-specific fields ────────────────────────
+  // Any key sent by the website that doesn't map to a typed column above
+  // is stored here. Schema is intentionally open — every website can differ.
+  // Example: { "budget": "5000", "projectType": "web", "country": "US" }
+  data        Json?
+
+  // ── System / request metadata ─────────────────────────────────────────────
+  ip          String?
+  userAgent   String?
+  referrer    String?
+
+  submittedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
 
   // Relationships
-  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
-
-  // Future assignment:
-  assignedToId String?
-  assignedTo   User?   @relation("LeadAssignment", fields: [assignedToId], references: [id], onDelete: SetNull)
-
-  notes       LeadNote[]
-  attachments Attachment[]
-  emailLogs   EmailLog[]
-
-  // Indexes optimized for dashboard analytics and querying leads
-  @@index([websiteId, submittedAt(sort: Desc)])
-  @@index([websiteId, status])
-  @@index([assignedToId])
-}
-
-model LeadNote {
-  id        String   @id @default(cuid())
-  leadId    String
-  authorId  String
-  content   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relationships
-  lead   Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
-
-  @@index([leadId])
-  @@index([authorId])
-}
-
-model Attachment {
-  id        String   @id @default(cuid())
-  leadId    String
-  name      String
-  url       String // S3/Uploadthing URL
-  size      Int? // Size in bytes
-  mimeType  String?
-  createdAt DateTime @default(now())
-
-  // Relationships
-  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
-
-  @@index([leadId])
-}
-
-model Webhook {
-  id        String   @id @default(cuid())
-  websiteId String
-  url       String // Target endpoint URL
-  secret    String? // Secret token for HMAC signatures
-  events    String[] // Array of strings (e.g. ["lead.created", "lead.status_updated"])
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relationships
-  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  website     Website  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
 
   @@index([websiteId])
-}
-
-model EmailLog {
-  id        String      @id @default(cuid())
-  leadId    String
-  resendId  String?     @unique // Unique Resend message ID for tracking delivery status webhooks
-  subject   String
-  body      String? // Optional body metadata or template name
-  status    EmailStatus @default(SENT)
-  sentAt    DateTime    @default(now())
-  openedAt  DateTime?
-  clickedAt DateTime?
-  updatedAt DateTime    @updatedAt
-
-  // Relationships
-  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
-
-  @@index([leadId])
-  @@index([resendId])
+  @@index([email])
 }

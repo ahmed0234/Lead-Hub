@@ -2,7 +2,6 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import prisma from "@/lib/prisma";
-import { getWorkspaceByClerkOrg } from "@/lib/workspace";
 import {
   Card,
   CardContent,
@@ -11,40 +10,44 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Globe, Users } from "lucide-react";
+import { Globe, Inbox } from "lucide-react";
 import AddWebsiteButton from "./_components/AddWebsiteButton";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Websites — Lead Hub",
-  description: "Manage your websites and collect leads.",
+  description: "Manage your registered websites.",
 };
 
 export default async function WebsitesPage() {
-  const { orgId } = await auth();
+  const { userId: clerkUserId } = await auth();
 
-  if (!orgId) {
+  if (!clerkUserId) {
     redirect("/sign-in");
   }
 
-  const workspace = await getWorkspaceByClerkOrg(orgId);
+  const user = await prisma.user.findUnique({
+    where: { clerkUserId },
+  });
 
-  const websites = workspace
-    ? await prisma.website.findMany({
-        where: { workspaceId: workspace.id },
-        include: { _count: { select: { leads: true } } },
-        orderBy: { createdAt: "desc" },
-      })
-    : [];
+  if (!user) {
+    redirect("/sign-in");
+  }
+
+  const websites = await prisma.website.findMany({
+    where: { userId: user.id },
+    include: { _count: { select: { leads: true } } },
+    orderBy: { createdAt: "desc" },
+  });
 
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Websites</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Registered Websites</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage your websites and their lead collection.
+            Create and manage websites to receive form submissions.
           </p>
         </div>
         <AddWebsiteButton />
@@ -52,11 +55,11 @@ export default async function WebsitesPage() {
 
       {/* Content */}
       {websites.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-20 text-center">
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-20 text-center bg-card">
           <Globe size={40} className="text-muted-foreground mb-4" />
-          <h2 className="text-lg font-medium">No websites yet</h2>
+          <h2 className="text-lg font-semibold">No websites registered yet</h2>
           <p className="text-sm text-muted-foreground mt-1 mb-4">
-            Add your first website to start collecting leads.
+            Register your first website to start collecting form leads.
           </p>
           <AddWebsiteButton />
         </div>
@@ -68,32 +71,27 @@ export default async function WebsitesPage() {
               href={`/dashboard/websites/${site.id}`}
               className="group"
             >
-              <Card className="h-full transition-shadow hover:shadow-md cursor-pointer">
-                <CardHeader className="pb-2">
+              <Card className="h-full transition-all hover:shadow-md cursor-pointer border border-border hover:border-primary/30">
+                <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="text-base leading-tight group-hover:text-primary transition-colors">
+                    <CardTitle className="text-base font-semibold leading-tight group-hover:text-primary transition-colors truncate">
                       {site.name}
                     </CardTitle>
                     <Badge
-                      variant={site.isActive ? "default" : "secondary"}
+                      variant={site.status === "ACTIVE" ? "default" : "secondary"}
                       className="shrink-0"
                     >
-                      {site.isActive ? "Active" : "Inactive"}
+                      {site.status === "ACTIVE" ? "Active" : "Inactive"}
                     </Badge>
                   </div>
-                  <CardDescription className="flex items-center gap-1 text-xs mt-1">
-                    <Globe size={12} />
+                  <CardDescription className="flex items-center gap-1.5 text-xs mt-1 font-mono">
+                    <Globe size={13} className="text-muted-foreground" />
                     {site.domain}
                   </CardDescription>
-                  {site.description && (
-                    <p className="text-xs text-muted-foreground mt-2 line-clamp-2 italic">
-                      {site.description}
-                    </p>
-                  )}
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                    <Users size={14} />
+                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground font-medium">
+                    <Inbox size={15} />
                     <span>
                       {site._count.leads}{" "}
                       {site._count.leads === 1 ? "lead" : "leads"}
