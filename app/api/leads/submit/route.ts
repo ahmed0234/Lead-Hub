@@ -30,12 +30,18 @@ function getSecretKey(req: NextRequest, body: any): string | null {
 
   // 2. Check query params
   const url = new URL(req.url);
-  const querySecret = url.searchParams.get("secretKey") || url.searchParams.get("secret") || url.searchParams.get("apiKey");
+  const querySecret = url.searchParams.get("secretKey") || url.searchParams.get("secret_key") || url.searchParams.get("secret") || url.searchParams.get("apiKey") || url.searchParams.get("api_key");
   if (querySecret) return querySecret.trim();
 
   // 3. Check body fields
   if (body && typeof body === "object") {
-    const keys = ["secretKey", "secret", "apiSecret", "_secret", "apiKey", "key"];
+    const keys = [
+      "secretKey", "secret_key", "secretkey",
+      "secret", "_secret",
+      "apiSecret", "api_secret", "apisecret",
+      "apiKey", "api_key", "apikey",
+      "key"
+    ];
     for (const key of keys) {
       if (body[key] && typeof body[key] === "string") {
         return body[key].trim();
@@ -61,7 +67,13 @@ function getFormData(body: any): Record<string, any> {
   }
 
   // Otherwise, return a shallow copy of the body with secret fields excluded
-  const secretFields = ["secretKey", "secret", "apiSecret", "_secret", "apiKey", "key"];
+  const secretFields = [
+    "secretKey", "secret_key", "secretkey",
+    "secret", "_secret",
+    "apiSecret", "api_secret", "apisecret",
+    "apiKey", "api_key", "apikey",
+    "key"
+  ];
   const formData: Record<string, any> = {};
   for (const [key, value] of Object.entries(body)) {
     if (!secretFields.includes(key)) {
