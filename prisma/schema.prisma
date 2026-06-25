@@ -84,8 +84,8 @@ model Website {
   id          String   @id @default(cuid())
   workspaceId String
   name        String
-  domain      String?  @unique // Custom custom domains
-  slug        String   @unique // Subdomains or internal slug structure
+  domain      String   @unique // Required domain for the client site
+  secret      String   @unique // Auto-generated API key (e.g. lh_x8f3k29s7d91ab)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
