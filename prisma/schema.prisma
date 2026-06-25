@@ -40,27 +40,14 @@ model Website {
 model Lead {
   id          String   @id @default(cuid())
   websiteId   String
-
-  // ── Common typed fields (present on most forms) ──────────────────────────
-  // These are indexed/queryable columns. Map inbound JSON keys to these where possible.
   name        String?
   email       String?
   phone       String?
-  company     String?
   message     String?
-  source      String?  // e.g. "contact-form", "newsletter", "demo-request"
-
-  // ── Flexible catch-all for website-specific fields ────────────────────────
-  // Any key sent by the website that doesn't map to a typed column above
-  // is stored here. Schema is intentionally open — every website can differ.
-  // Example: { "budget": "5000", "projectType": "web", "country": "US" }
-  data        Json?
-
-  // ── System / request metadata ─────────────────────────────────────────────
   ip          String?
   userAgent   String?
   referrer    String?
-
+  metadata    Json?
   submittedAt DateTime @default(now())
   createdAt   DateTime @default(now())
 
