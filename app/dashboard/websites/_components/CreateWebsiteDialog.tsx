@@ -24,6 +24,7 @@ export default function CreateWebsiteDialog({ open, onOpenChange }: Props) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [domain, setDomain] = useState("");
+  const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
 
@@ -35,7 +36,7 @@ export default function CreateWebsiteDialog({ open, onOpenChange }: Props) {
       const res = await fetch("/api/websites", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, domain }),
+        body: JSON.stringify({ name, domain, description }),
       });
 
       const json = await res.json();
@@ -57,6 +58,7 @@ export default function CreateWebsiteDialog({ open, onOpenChange }: Props) {
   function handleClose() {
     setName("");
     setDomain("");
+    setDescription("");
     setCreatedSecret(null);
     onOpenChange(false);
   }
@@ -93,6 +95,18 @@ export default function CreateWebsiteDialog({ open, onOpenChange }: Props) {
                   value={domain}
                   onChange={(e) => setDomain(e.target.value)}
                   required
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="website-desc">Description (Optional)</Label>
+                <textarea
+                  id="website-desc"
+                  placeholder="e.g. Main corporate website for lead capturing"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={2}
+                  className="flex w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none"
                 />
               </div>
 

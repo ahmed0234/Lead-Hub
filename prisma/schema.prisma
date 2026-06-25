@@ -85,6 +85,7 @@ model Website {
   workspaceId String
   name        String
   domain      String   @unique // Required domain for the client site
+  description String?  // Optional description of the website
   secret      String   @unique // Auto-generated API key (e.g. lh_x8f3k29s7d91ab)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())

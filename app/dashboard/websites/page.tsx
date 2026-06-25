@@ -85,6 +85,11 @@ export default async function WebsitesPage() {
                     <Globe size={12} />
                     {site.domain}
                   </CardDescription>
+                  {site.description && (
+                    <p className="text-xs text-muted-foreground mt-2 line-clamp-2 italic">
+                      {site.description}
+                    </p>
+                  )}
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center gap-1 text-sm text-muted-foreground">

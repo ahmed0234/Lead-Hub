@@ -14,14 +14,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: { name?: string; domain?: string };
+  let body: { name?: string; domain?: string; description?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { name, domain } = body;
+  const { name, domain, description } = body;
 
   if (!name || typeof name !== "string" || name.trim().length === 0) {
     return NextResponse.json(
@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
         workspaceId: newWorkspace.id,
         name: name.trim(),
         domain: domain.trim().toLowerCase(),
+        description: description?.trim() || null,
         secret,
       },
     });
@@ -80,6 +81,7 @@ export async function POST(req: NextRequest) {
       workspaceId: workspace.id,
       name: name.trim(),
       domain: domain.trim().toLowerCase(),
+      description: description?.trim() || null,
       secret,
     },
   });
