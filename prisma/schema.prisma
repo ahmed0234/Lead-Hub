@@ -17,22 +17,22 @@ model User {
   updatedAt   DateTime @updatedAt
 
   // Relationships
-  websites    Website[]
+  websites Website[]
 }
 
 model Website {
-  id          String   @id @default(cuid())
-  userId      String
-  name        String
-  domain      String   @unique
-  apiSecret   String   @unique
-  status      String   @default("ACTIVE") // "ACTIVE" or "INACTIVE"
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  domain    String   @unique
+  apiSecret String   @unique
+  status    String   @default("ACTIVE") // "ACTIVE" or "INACTIVE"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relationships
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  leads       Lead[]
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leads Lead[]
 
   @@index([userId])
 }
@@ -52,7 +52,7 @@ model Lead {
   createdAt   DateTime @default(now())
 
   // Relationships
-  website     Website  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
 
   @@index([websiteId])
   @@index([email])
